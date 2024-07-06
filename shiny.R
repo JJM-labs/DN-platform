@@ -2,42 +2,212 @@
 library(rms)
 library(mice)
 library(pROC)
+library(dplyr)
 library(ggsci)
-#library(ggDCA)
 library(shiny)
 library(purrr)
 library(readxl)
 library(impute)
 library(ggpubr)
+library(ggforce)
+library(shinyjs)
 library(cowplot)
 library(ggplot2)
-library(showtext)
+library(mapproj)
 library(patchwork)
 library(data.table)
 library(missForest)
+library(countrycode)
 library(randomForest)
 library(RColorBrewer)
 library(shinydashboard)
 library(shinycssloaders)
 
 
-#model data
+####model data####
 load("model.RData")
 
-
-#function
-source("ggDCA.R")
-
-#app
-sidebar <- dashboardSidebar(
+####app####
+sidebar = dashboardSidebar(
+  width = 280,
+  tags$style(HTML('
+    .sidebar-menu .menu-text {
+      padding-left: 15px; 
+    }
+    
+    .sidebar-menu li a {
+      letter-spacing: 1.5px; 
+      font-size: 16px; 
+      margin-top: 10px;
+    }
+   ')),
+  
   sidebarMenu(
-    menuItem("Single sample", tabName = "single", icon = icon("user")),
-    menuItem("Multiple samples", tabName = "multi",icon = icon("users")),
+    menuItem("Single sample", 
+             tabName = "single", 
+             icon = icon("user")),
+    menuItem("Multiple samples", 
+             tabName = "multi",
+             icon = icon("users")),
     menuItem("Interpretability", 
              tabName = "interpretability", 
-             icon = icon("chart-bar"))))
+             icon = icon("chart-bar")),
+    menuItem("Instruction for users",
+             tabName = "info",
+             icon = icon("info-circle")),
+    menuItem("Chinese Version",
+             icon = icon("language"),newtab = F,
+             href = "https://dn-prediction.shinyapps.io/DN-PRED-Chinese/")
+   )
+  )
 
-body <- dashboardBody(
+
+####body####
+body = dashboardBody(
+  
+  tags$head(
+    tags$style(HTML("
+      .instruction-container {
+        border: 1px solid #ddd;
+        padding: 20px;
+        border-radius: 5px;
+        background-color: transparent;
+        margin-bottom: 20px;
+        font-size: 20px;  
+        font-weight: 500;
+      }
+      .instruction-container h2 {
+        margin-top: 0;
+      }
+      .instruction-content {
+        font-size: 25px;  
+        line-height: 1.8; 
+      }
+      .instruction-content p {
+        margin-bottom: 15px;
+      }
+      .instruction-content a {
+        color: #007bff;
+        text-decoration: none;
+      }
+      .instruction-content a:hover {
+        text-decoration: underline;
+      }
+      .contact-info {
+        position: absolute;
+        bottom: 40px; 
+        right: 10px;
+        background-color: none; 
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        font-size: 16px;
+        font-weight: 500;
+        z-index: 10; 
+      }
+      .contact-info strong {
+        font-weight: 550; 
+      }
+      .footer {
+        text-align: center;
+        margin-top: 20px;
+        font-size: 15px;
+        color: #fff;  
+        background-color: #3C8DBC;
+        padding: 10px;
+        border-top: 1px solid #ddd;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        z-index: 1; 
+      }
+      .contact-us-link {
+      color: #fff;
+      cursor: pointer;
+      font-size: 18px;
+      text-decoration: underline;
+      margin-left: 100px;
+      }
+      
+      .visit_country-link {
+      position: absolute; 
+      bottom: 10px; 
+      right: 160px; 
+      font-size: 18px; 
+      color: white;
+      cursor: pointer;
+      font-size: 18px;
+      text-decoration: underline;
+      }
+
+    .modal-dialog-centered {
+      display: flex;
+      align-items: center;
+      min-height: calc(100% - 1rem);
+      }
+
+    .modal-content {
+      margin: auto;
+      font-size: 18px;
+      }
+
+    .modal-title {
+      font-weight: bold;
+      font-size: 20px;
+    }
+     .orcid-link {
+      text-decoration: underline; 
+      color: #007bff; 
+    }
+
+    .orcid-link:hover {
+      text-decoration: none; 
+    }
+    
+    .email-link {
+      color: black; 
+      text-decoration: none; 
+    }
+
+    .email-link:hover {
+      text-decoration: underline; 
+    }
+    ")),
+    
+    tags$head(
+      tags$script(
+        HTML('$(document).ready(function() {
+              function updateTime() {
+                var now = new Date();
+                var year = now.getFullYear();
+                var month = ("0" + (now.getMonth() + 1)).slice(-2);
+                var day = ("0" + now.getDate()).slice(-2);
+                var hours = ("0" + now.getHours()).slice(-2);
+                var minutes = ("0" + now.getMinutes()).slice(-2);
+                var seconds = ("0" + now.getSeconds()).slice(-2);
+                var timezone = now.toLocaleTimeString("en-us",{timeZoneName:"short"}).split(" ")[2];
+                var formattedTime = year + "-" + month + "-" + day + " " + hours + ":" + minutes + ":" + seconds + " (" + timezone + ")";
+                $("#currentTime").text(formattedTime);}
+              setInterval(updateTime, 1000);
+              updateTime();});
+              ')
+        ),
+      tags$script('
+      $(document).ready(function(){
+        $.get("https://ipapi.co/json/", function(response) {
+          Shiny.setInputValue("user_country", response.country_name, {priority: "event"});
+        }, "json");
+        
+        $("#totalVisits").click(function() {
+          Shiny.setInputValue("show_chart", true, {priority: "event"});
+        });
+      });
+    '),
+      )
+  ),
+  
   tabItems(tabItem(tabName = "single",
            h2("Single sample prediction"),
            
@@ -165,41 +335,11 @@ body <- dashboardBody(
       collapsible = TRUE, 
       withSpinner(plotOutput("gplot_color"))
     )
-  ),
-  
-  fluidRow(
-    box(
-      width = 12, 
-      height = 480,
-      title ="Notes",
-      status = "warning",
-      solidHeader = TRUE,
-      collapsible = TRUE, 
-      tags$span(
-        style = "color: black; font-size: 18px;",
-        HTML("<p>When using this platform, please take notes of the following:
-              </p><p>1.The model results are intended for reference and to assist in decision-making, and should not be used as the sole basis for clinical diagnosis.
-              </p><p>2.If there are any suspicions, further confirmatory tests are recommended.
-              </p><p>3.While this model shows relatively reliable results in both training data and external validation, diagnostic errors may still occur due to variations in detection errors from different instruments and individual differences. As the results approach 50%, the probability of prediction errors gradually increases, as shown in the following figure.
-              </p><p>4.The platform build code can be found on the <a href='https://github.com/JJM-labs/DN-platform'>GitHub</a> homepage,
-                       and the data used in this study can be obtained from the following databases:  
-                       <a href='http://www.ncmi.cn'>NPHDC</a>, 
-                       <a href='https://wwwn.cdc.gov/nchs/nhanes'>NHANES</a>, and 
-                       <a href='https://pubmed.ncbi.nlm.nih.gov/18370851/'>TWBB</a>.
-              </p><p>5.If you are using this website, please cite our paper: <a href='https://link.springer.com/article/10.1007/s12020-024-03735-1'>Ma, J., An, S., Cao, M. et al. Integrated machine learning and deep learning for predicting diabetic nephropathy model construction, validation, and interpretability. Endocrine (2024). https://doi.org/10.1007/s12020-024-03735-1.</a>
-              "
-             )
-        ),
-      withSpinner(plotOutput("gplot_error")),
-      style = "max-height: 435px; 
-               max-width: auto; 
-               overflow: auto;"
-    )
-  )
+   )
   ),
 
     tabItem(tabName = "multi",
-            h2("Multiple sample prediction"),
+            h2("Multiple samples prediction"),
     fluidRow(
       box(fileInput(inputId="multi",
                     accept=c(".txt",".csv",".xlsx"),
@@ -232,7 +372,6 @@ body <- dashboardBody(
           downloadButton("down1","Example File"),
           downloadButton("label","Data Dictionary")
           ),
-      
     ),
          
     fluidRow(
@@ -296,19 +435,80 @@ body <- dashboardBody(
                 collapsible = TRUE, 
                 downloadButton("down_gplot_inter","Download"))
           )
-  )
+  ),
+  tabItem(
+    tabName = "info",
+    fluidRow(
+      div(class = "instruction-container",
+          h2("About DN platform"),
+          HTML("<p>This platform is designed to predict the risk of complications of kidney disease in diabetic patients. 
+                   It was trained with clinical data from 3,000 diabetic patients from the National Population Health Data 
+                   Center (NPHDC) of China platform, and was validated in two independent external validation cohorts, 
+                   including the National Health and Nutrition Examination Survey (NHANES) of the United States and Taiwan Biobank, 
+                   and achieved relatively favorable results.</p>
+                <p>If you use it, please considering citing:<br>
+                   <a href='https://link.springer.com/article/10.1007/s12020-024-03735-1'>Ma J, An S, Cao M, et al. Endocrine (2024). https://doi.org/10.1007/s12020-024-03735-1.<br>
+                   Integrated machine learning and deep learning for predicting diabetic nephropathy model construction, validation, and interpretability.</a></p>
+               ")
+          ),
+      div(class = "instruction-container",
+          h2("Instruction for users"),
+          HTML("<p>Please note the following when using this platform:</p>
+                <p>1. The model results are for reference and auxiliary decision-making only and should not be used as the sole basis for clinical diagnosis. If in doubt, it is recommended to conduct further confirmatory tests.</p>
+                <p>2. Although the model has shown relatively reliable results in training and external validation data, there are still diagnostic errors due to measurement errors of different instruments and individual differences. When the result approaches 50%, the probability of prediction error gradually increases, as shown in the figure below.</p>
+                <p>3. You can find the code for building the platform on our <a href='https://github.com/JJM-labs/DN-platform'>GitHub</a> page. The data used in the research can be found in the following databases:
+                      <a href='http://www.ncmi.cn'>NPHDC</a>,
+                      <a href='https://wwwn.cdc.gov/nchs/nhanes'>NHANES</a>,
+                      <a href='https://pubmed.ncbi.nlm.nih.gov/18370851/'>Taiwan Biobank</a>.</p>
+               ")
+      ),
+      withSpinner(plotOutput("gplot_error"))
+      )
+    )
+  ),
+  tags$footer(
+    class = "footer",
+    HTML("Copyright © @2024 Bengbu Medical University [软著登字第13128949号]"),
+    span("Contact-Us", class = "contact-us-link", 
+         onclick = "Shiny.setInputValue('show_contact_modal', true, {priority: 'event'})"),
+    span("Total Visits: ", class = "visit_country-link", 
+         onclick = "Shiny.setInputValue('show_chart', true, {priority: 'event'})"),
+    tags$div(uiOutput("visitCount", inline = F),
+             style = "position: absolute; bottom: 10px; right: 30px; font-size: 18px; color: white;
+             ")
   )
 )
 
+####head####
+header=dashboardHeader(
+  titleWidth =280,
+  title = tags$div(
+    tags$img(src = base64enc::dataURI(file = "./www/logo.png", mime = "image/png"),
+                   height = "50px", style = "margin-right: 3px;"),
+    "DN Risk Prediction",
+  ),
+  tags$li(
+    id = "currentTime",
+    style = "position: absolute; right: 20px; 
+             top: 15px; font-size: 20px; color: white;",
+    class = "dropdown"
+  )
+)
 
-ui <- dashboardPage(
-  dashboardHeader(title = "DN Risk Prediction"),
+####ui####
+ui = dashboardPage(
+  header,
   sidebar,
-  body
+  body,
+  tags$head(
+    tags$link(rel = "icon", type = "image/x-icon", href = "logo.ico"),
+    tags$script("document.title = 'DN platform';")
+  )
 )
 
-server <- function(input, output) {
-  single_pred_data <- eventReactive(input$go1,{
+####server####
+server = function(input, output,session) {
+  single_pred_data = eventReactive(input$go1,{
     data=data.frame(ALB_CR=as.data.frame(input$ALB_CR)[,1,drop=T],
                SCR=as.data.frame(input$SCR)[,1,drop=T],
                BU=as.data.frame(input$BU)[,1,drop=T],
@@ -328,23 +528,19 @@ server <- function(input, output) {
     data
   })
   
-  output$out_DN <- renderPrint({
-    cat("Warning: This result is not a diagnostic gold standard, and it is recommended to conduct further diagnostic tests for suspected patients")
-  })
-  
-  
   output$gplot_color=renderPlot({
     data1=single_pred_data()
     DN=data.frame(predict(rf.biop,data1,type="p"))[1,2,drop=T]
     DN_p=paste0(" \n DN probability: ",as.numeric(round(DN*100,2)),"% \n ")
     
-    values=seq(0, 0.5, length.out = 600)
-    values2=seq(0.5, 1, length.out = 600)
+    values=seq(0, 0.5, length.out = 700)
+    values2=seq(0.5, 1, length.out = 700)
     data=data.frame(x = "x", y=c(values,values2) ,value = c(values,values2))
-    showtext_auto()
+    #showtext_auto()
     ggplot(data, aes(x = y, y = 1, fill = value)) +
-      geom_tile() + geom_vline(xintercept = DN,lty="dashed")+
-      scale_fill_gradientn(colours = c('blue','cyan','green','orange','red'))+
+      geom_tile() + geom_vline(xintercept = DN,lty="dashed",color="red",size=2)+
+      #scale_fill_gradientn(colours = c('blue','cyan','green','orange','red'))+
+      scale_fill_viridis_c(direction = -1,end = 0.8)+
       scale_y_continuous(expand = c(0,0))+
       scale_x_continuous(expand = c(0,0))+
       theme_bw()+labs(x="Probability",y=NULL,title =DN_p)+
@@ -382,7 +578,7 @@ server <- function(input, output) {
   })
   
   ##multi
-  read.d1 <- eventReactive(input$go_mul,{
+  read.d1 = eventReactive(input$go_mul,{
     inFile_multi = input$multi
     if (is.null(inFile_multi)) {
       return(NULL)
@@ -474,7 +670,7 @@ server <- function(input, output) {
     return(muti_data_scale)
   })
   
-  muti_pred_data <- reactive({
+  muti_pred_data = reactive({
     muti_data=muti_data_imp_scale()
     muti_pred=data.frame(predict(rf.biop,muti_data,type="p"))
     muti_pred$Type=round(muti_pred$X1)
@@ -504,21 +700,21 @@ server <- function(input, output) {
   }
   )
   
-  output$down1 <- downloadHandler(
+  output$down1 = downloadHandler(
     filename = "Reference-file_multi.csv",
     content = function(file) {
       fwrite(example_data[1:20,], file,col.names = T)
     }
   )
   
-  output$label <- downloadHandler(
+  output$label = downloadHandler(
     filename = "Data dictionary.txt",
     content = function(file) {
       fwrite(label, file,col.names = T, sep = "\t")
     }
   )
   
-  output$down2 <- downloadHandler(
+  output$down2 = downloadHandler(
     filename = function() {
       paste0("DN_prediction.csv")
     },
@@ -544,8 +740,8 @@ server <- function(input, output) {
   
   color=c("#D4B982","#518BB0")
   
-  output$gplot_num <- renderPlot({
-    showtext_auto()
+  output$gplot_num = renderPlot({
+    
     p1=ggplot(data = muti_pred_num()) + 
       geom_col(aes(x=Type,y=num,fill=Type)) +
       geom_text(aes(x=Type,y=num+num*0.04,label=num),size=6)+
@@ -562,7 +758,7 @@ server <- function(input, output) {
     p2=ggplot(data = muti_pred_num2()) + 
       theme_bw()+ 
       geom_col(aes(x = ID,y = DN_probability,fill = Type))+ 
-      labs(x="Patient ID (Increasing possibility)",y="DN probability")+
+      labs(x="Patient ID (Increasing probability)",y="DN probability")+
       scale_fill_manual(values = color)+
       theme(legend.position=c(0.05,0.95),
             panel.grid = element_blank(),
@@ -604,7 +800,7 @@ server <- function(input, output) {
   }
   )
   
-  output$down_inter <- downloadHandler(
+  output$down_inter = downloadHandler(
     filename = "Reference-file_Interpretability.csv",
     content = function(file) {
       fwrite(inter_file, file,col.names = T)
@@ -695,11 +891,14 @@ server <- function(input, output) {
                        simplify = F)
     }
     else if(input$inter_type=="dca"){
+      
+      source("ggDCA.R")
+      
       plot_data=inter_data()
       plot_data=plot_data[,-2]
       plot_data=as.data.frame(plot_data)
       plot_data[,1]=as.numeric(plot_data[,1])
-      dca_data<<-plot_data
+      dca_data<=plot_data
       
       dca_model=sapply(colnames(dca_data)[-1],
                        function(x){
@@ -798,14 +997,14 @@ server <- function(input, output) {
   }
   )
   
-  output$gplot_inter <- renderPlot({
+  output$gplot_inter = renderPlot({
     plot_list=gplot_inter_list()
     
     plot=cowplot::plot_grid(plotlist = plot_list,ncol = 5,align = 'hv')
     return(plot)
   })
   
-  output$down_gplot_inter <- downloadHandler(
+  output$down_gplot_inter = downloadHandler(
     
     filename = function() {
       if(input$inter_type=="roc"){
@@ -855,12 +1054,216 @@ server <- function(input, output) {
       unlink(save_path, recursive = TRUE)
     }
   )
-  output$down_paper <- downloadHandler(
+  output$down_paper = downloadHandler(
     zip(file, files = list.files(
       save_path, full.names = TRUE))
   )
+  
+  observeEvent(input$show_contact_modal, {
+    showModal(modalDialog(
+      title = tags$b("Contact Us:"), 
+      HTML("<p><b>Junjie Ma</b><p>
+            <p><b>Affiliation:</b> <a href='https://www.bbmu.edu.cn/' target='_blank'  class='email-link'>Bengbu Medical University</a></p>
+            <p><b>E-mail:</b> <a href='mailto:mjj2020@stu.bbmc.edu.cn' class='email-link'>mjj2020@stu.bbmc.edu.cn</a></p> 
+            <p><b>Address</b>: No.2600 Donghai Avenue,<p><p>
+                               Longzihu District, Bengbu 233030, Anhui Province, China<p>
+            <p><b>More information</b>: <a href='https://orcid.org/0000-0002-8847-3093' target='_blank' class='orcid-link'>ORCID</a>, 
+                                         <a href='https://github.com/JJM-labs' target='_blank' class='orcid-link'>GitHub</a>, 
+                                         <a href='https://scholar.google.com/citations?user=Hxfw-UQAAAAJ&hl=en' target='_blank' class='orcid-link'>Google Scholar</a>, 
+                                         <a href='https://www.bbmu.edu.cn/' target='_blank' class='orcid-link'>Affiliation</a>.
+            "),
+      easyClose = TRUE,
+      footer = modalButton("Close"),
+    ))
+  })
+  
+  #visit
+  visit_count = 1
+  visit_count_td = 1
+  last_date = Sys.Date()
+  country_visits = list()
+  monthly_visits = data.frame(Month = character(), Visits = numeric())
+  
+  rv = reactiveValues(
+    visit_count = visit_count, 
+    visit_count_td = visit_count_td,
+    last_date = last_date,
+    country_visits = country_visits,
+    monthly_visits = monthly_visits
+  )
+  
+  if (file.exists("./www/visit_counter.RData")) {
+    load("./www/visit_counter.RData")
+    rv$visit_count = visit_count
+    rv$last_date = last_date
+    rv$visit_count_td = visit_count_td
+    rv$country_visits = country_visits
+    rv$monthly_visits = monthly_visits
+  } else {
+    visit_count = 1
+    visit_count_td = 1
+    last_date = Sys.Date()
+    country_visits = list()
+    monthly_visits = data.frame(Month = character(), Visits = numeric())
+    save(visit_count, visit_count_td, last_date, country_visits,monthly_visits, file = "./www/visit_counter.RData")
+  }
+  
+  observeEvent(input$user_country, {
+    if (!is.null(input$user_country)) {
+      country <- input$user_country
+      if (is.null(rv$country_visits[[country]])) {
+        rv$country_visits[[country]] <- 1
+      } else {
+        rv$country_visits[[country]] <- rv$country_visits[[country]] + 1
+      }
+      
+      country_visits <- isolate(rv$country_visits)
+      if (isolate(rv$last_date) != Sys.Date()) {
+        rv$visit_count_td = 1
+      } else {
+        rv$visit_count_td = isolate(rv$visit_count_td) + 1
+      }
+      
+      rv$last_date = Sys.Date()
+      rv$visit_count = isolate(rv$visit_count) + 1
+      visit_count = isolate(rv$visit_count)
+      visit_count_td = isolate(rv$visit_count_td)
+      last_date = isolate(rv$last_date)
+      country_visits = isolate(rv$country_visits)
+      
+      current_month = format(Sys.Date(), "%Y-%m")
+      if (nrow(isolate(rv$monthly_visits)) == 0 || tail(isolate(rv$monthly_visits$Month), 1) != current_month) {
+        rv$monthly_visits = rbind(isolate(rv$monthly_visits), data.frame(Month = current_month, Visits = 1))
+      } else {
+        monthly_visits2=isolate(rv$monthly_visits)
+        monthly_visits2$Visits[nrow(isolate(rv$monthly_visits))] = isolate(rv$monthly_visits)$Visits[nrow(isolate(rv$monthly_visits))] + 1
+        rv$monthly_visits=monthly_visits2
+      }
+      
+      monthly_visits = isolate(rv$monthly_visits)
+      
+      save(visit_count, visit_count_td, last_date, country_visits,monthly_visits, file = "./www/visit_counter.RData")
+    }
+  })
+  
+  output$visitCount = renderUI({
+    count = as.character(isolate(rv$visit_count))
+    count_td = as.character(isolate(rv$visit_count_td))
+    count = paste0("", count, "&nbsp;&nbsp;&nbsp;&nbsp;Today: ", count_td)
+    HTML(count)
+  })
+  
+  observeEvent(input$show_chart, {
+    showModal(modalDialog(
+      title = "Visits Detail",
+      plotOutput("country_map"),
+      br(),
+      plotOutput("country_chart"),
+      easyClose = TRUE,
+      footer = modalButton("Close"),
+      size = "l"
+    ))
+  })
+  
+  output$country_chart = renderPlot({
+    
+    ##pie
+    country_data = isolate(rv$country_visits)
+    country_names = names(country_data)
+    country_counts = unlist(country_data)
+    total_counts = sum(country_counts)
+    
+    if (length(country_data) > 5) {
+
+      sorted_data = sort(country_counts, decreasing = TRUE)
+      
+      pie_data = data.frame(
+        Country = c(names(sorted_data)[1:5],"others"),
+        Visits = c(sorted_data[1:5],sum(sorted_data[-(1:5)]))
+      )
+      pie_data$Percentage = pie_data$Visits / total_counts * 100
+      
+    } else {
+      pie_data = data.frame(
+        Country = names(country_data),
+        Visits = unlist(country_data),
+        Percentage = unlist(country_data) / sum(unlist(country_data)) * 100
+      )
+    }
+    pie_data=arrange(pie_data,desc(Visits))
+    pie_data$label=paste0(round(pie_data$Percentage,2),"%")
+    pie_data$Country=factor(pie_data$Country,levels = c(unique(subset(pie_data, Country != "others")$Country),"others"))
+    
+    p1=ggpie(pie_data, "Visits",
+            label = "label",
+            lab.pos = 'in',
+            lab.font = c(5, 'black'),
+            fill = "Country",
+            color = "white")+
+      scale_fill_d3("category20c")+
+      labs(title = "Visits in pie")+
+      guides(fill=guide_legend(nrow = 2))+
+      theme(plot.title = element_text(size=20,hjust=0.5),
+            legend.position = "bottom",
+            legend.title = element_text(size = 12),
+            legend.text = element_text(size = 12)) 
+    
+    ##monthly
+    monthly_data = isolate(rv$monthly_visits)
+    if(length(monthly_data$Month)>5){
+      monthly_data=monthly_data[(nrow(monthly_data)-4):nrow(monthly_data),]  
+    }
+    
+    p2=ggplot(monthly_data, aes(x = Month, y = Visits,group=1)) +
+      geom_point(size=2,color="#3182BDFF") +
+      geom_line(color="#3182BDFF") +
+      theme_minimal() +
+      labs(title = "Monthly Visits", x = "\n Time", y = "Number of Visits") +
+      theme(plot.title = element_text(size = 20, hjust = 0.5),
+            axis.title = element_text(size = 15),
+            axis.text.y = element_text(size = 12,color="black"),
+            axis.text.x = element_text(size = 12,color="black",angle=35,hjust = 1))
+    
+    wrap_plots(p1, p2, widths = c(1.5,1))
+  })
+  
+  output$country_map = renderPlot({
+    world_map = map_data("world")
+    world_map$region = countrycode(world_map$region, "country.name", "country.name")
+    
+    world_map_data = data.frame(region = unique(world_map$region))
+    world_map_data$Visits = 0  
+    country_data = isolate(rv$country_visits)
+    if (length(country_data) > 0) {
+      for (country in names(isolate(rv$country_visits))) {
+        index = match(country, world_map_data$region)
+        if (!is.na(index)) {
+          world_map_data$Visits[index] = isolate(rv$country_visits)[[country]]
+        }
+      }
+    }
+    
+    world_map_data[which(world_map_data[,"region"]=="United States"),"region"]
+    
+    total_visits = sum(world_map_data$Visits)
+    world_map_data$Percentage = world_map_data$Visits / total_visits
+    
+    p3=ggplot(world_map_data, aes(map_id = region, fill = Percentage)) +
+      geom_map(map = world_map, aes(map_id = region), color = "black") +
+      expand_limits(x = world_map$long, y = world_map$lat) +
+      coord_fixed(1.3) +
+      scale_fill_viridis_c(direction = -1,end = 0.8)+
+      theme_void() +
+      guides(fill=guide_colorbar(ticks.colour = "black",ticks.linewidth = 1/.pt,
+                                 frame.colour = "black",frame.linewidth = 1/.pt,))+
+      labs(title = "Visits in world map",fill="Ratio")+
+      theme(plot.title = element_text(size=25,hjust=0.5),
+            legend.title = element_text(size = 15),
+            legend.text = element_text(size = 12)) 
+    p3
+  })
 }
 
-#run
+####run####
 shinyApp(ui, server)
 
