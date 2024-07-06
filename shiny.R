@@ -63,7 +63,6 @@ sidebar = dashboardSidebar(
 
 ####body####
 body = dashboardBody(
-  
   tags$head(
     tags$style(HTML("
       .instruction-container {
