@@ -34,7 +34,6 @@ sidebar = dashboardSidebar(
     .sidebar-menu .menu-text {
       padding-left: 15px; 
     }
-    
     .sidebar-menu li a {
       letter-spacing: 1.5px; 
       font-size: 16px; 
